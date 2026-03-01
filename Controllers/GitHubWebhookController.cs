@@ -22,6 +22,9 @@ namespace MergeGuard.Controllers
             _logger = logger;
         }
 
+        [HttpGet]
+        public IActionResult Health() => Ok(new { ok = true });
+
         [HttpPost]
         public async Task<IActionResult> Handle(CancellationToken ct)
         {
@@ -35,6 +38,13 @@ namespace MergeGuard.Controllers
             var eventName = Request.Headers["X-GitHub-Event"].ToString();
             var deliveryId = Request.Headers["X-GitHub-Delivery"].ToString();
             var signature = Request.Headers["X-Hub-Signature-256"].ToString();
+
+            // Handle ping events when creating / updating webhooks in github
+            if (eventName == "ping")
+            {
+                _logger.LogInformation("Received GitHub ping event.");
+                return Ok(new { ok = true, message = "pong" });
+            }
 
             _logger.LogInformation("Received GitHub webhook: Event={Event}, DeliveryId={DeliveryId}", eventName, deliveryId);
 

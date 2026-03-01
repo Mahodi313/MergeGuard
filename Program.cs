@@ -21,7 +21,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+// Todo: Enable later after testing with ngrok.
+//app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
