@@ -14,12 +14,16 @@ namespace MergeGuard.Controllers
         private readonly IConfiguration _config;
         private readonly OllamaRiskClient _ollama;
         private readonly ILogger<GitHubWebhookController> _logger;
+        private readonly GitHubInstallationTokenClient _installTokenClient;
+        private readonly GitHubChecksClient _checksClient;
 
-        public GitHubWebhookController(IConfiguration config, OllamaRiskClient ollama, ILogger<GitHubWebhookController> logger)
+        public GitHubWebhookController(IConfiguration config, OllamaRiskClient ollama, ILogger<GitHubWebhookController> logger, GitHubInstallationTokenClient installationTokenClient, GitHubChecksClient checksClient)
         {
             _config = config;
             _ollama = ollama;
             _logger = logger;
+            _installTokenClient = installationTokenClient;
+            _checksClient = checksClient;
         }
 
         [HttpGet]
@@ -70,7 +74,7 @@ namespace MergeGuard.Controllers
             var action = GetString(root, "action") ?? "unknown";
             var owner = GetString(root, "repository", "owner", "login");
             var repo = GetString(root, "repository", "name");
-            var prNumber = GetInt(root, "number");
+            var prNumber = GetInt(root, "pull_request", "number");
             var headSha = GetString(root, "pull_request", "head", "sha");
 
             _logger.LogInformation("PR webhook action={Action} repo={Owner}/{Repo} pr={PrNumber} sha={HeadSha}",
@@ -91,35 +95,65 @@ namespace MergeGuard.Controllers
                 });
             }
 
-            var diff = GetString(root, "diff");
-
-            if (string.IsNullOrWhiteSpace(diff))
+            var installationId = GetLong(root, "installation", "id");
+            if (installationId is null)
             {
-                return Ok(new
-                {
-                    ok = true,
-                    action,
-                    repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
-                    prNumber,
-                    headSha,
-                    message = "No 'diff' provided in payload. Real GitHub PR webhooks do not include diffs. Implement PR file fetching next."
-                });
+                return Ok(new { ok = true, message = "Missing installation.id in payload. Is the GitHub App installed on this repo?" });
             }
-
-            // Analyze the diff with Ollama and get a risk report
-            var report = await _ollama.AnalyzeAsync(diff, ct);
-
-            return Ok(new
+                
+            if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo) || string.IsNullOrWhiteSpace(headSha))
             {
-                ok = true,
-                eventName,
-                deliveryId,
-                action,
-                repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
-                prNumber,
-                headSha,
-                risk = report
-            });
+                return Ok(new { ok = true, message = "Missing owner/repo/headSha in payload." });
+            }
+               
+            // Get installation token
+            var token = await _installTokenClient.CreateInstallationTokenAsync(installationId.Value, ct);
+
+            // Create dummy check run
+            await _checksClient.CreateCheckRunAsync
+                (
+                    token,
+                    owner,
+                    repo,
+                    headSha,
+                    title: "MergeGuard (Demo)",
+                    summary: "Webhook received and GitHub app auth succeeded.",
+                    text: "Next: fetch PR files + run AI risk analysis.",
+                    ct
+                );
+
+            return Ok(new { ok = true, message = "Check run created." });
+
+            // add back later after testing
+            //var diff = GetString(root, "diff");
+
+            //if (string.IsNullOrWhiteSpace(diff))
+            //{
+            //    return Ok(new
+            //    {
+            //        ok = true,
+            //        action,
+            //        repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
+            //        prNumber,
+            //        headSha,
+            //        message = "No 'diff' provided in payload. Real GitHub PR webhooks do not include diffs. Implement PR file fetching next."
+            //    });
+            //}
+
+            //// Analyze the diff with Ollama and get a risk report
+            //var report = await _ollama.AnalyzeAsync(diff, ct);
+
+            //return Ok(new
+            //{
+            //    ok = true,
+            //    eventName,
+            //    deliveryId,
+            //    action,
+            //    repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
+            //    prNumber,
+            //    headSha,
+            //    risk = report
+            //});
         }
 
         private static bool IsActionWeCareAbout(string action)
@@ -184,7 +218,7 @@ namespace MergeGuard.Controllers
                 current = next;
             }
 
-            return current.ValueKind == JsonValueKind.String ? current.GetString() : current.GetString();
+            return current.ValueKind == JsonValueKind.String ? current.GetString() : current.ToString();
         }
 
         private static int? GetInt(JsonElement root, params string[] path)
@@ -201,6 +235,21 @@ namespace MergeGuard.Controllers
             }
 
             return current.ValueKind == JsonValueKind.Number && current.TryGetInt32(out var v) ? v : null;
+        }
+
+        private static long? GetLong(JsonElement root, params string[] path)
+        {
+            var current = root;
+            foreach (var p in path)
+            {
+                if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(p, out var next))
+                {
+                    return null;
+                }
+                current = next;
+            }
+
+            return current.ValueKind == JsonValueKind.Number && current.TryGetInt64(out var v) ? v : null;
         }
     }
 }
