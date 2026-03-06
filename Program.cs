@@ -29,6 +29,12 @@ builder.Services.AddHttpClient<GitHubChecksClient>(c =>
     c.DefaultRequestHeaders.UserAgent.ParseAdd("MergeGuard-App");
 });
 
+builder.Services.AddHttpClient<GitHubPullRequestClient>(c =>
+{
+    c.BaseAddress = new Uri("https://api.github.com/");
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("MergeGuard-App");
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
