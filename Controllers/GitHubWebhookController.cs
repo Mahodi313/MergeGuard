@@ -16,14 +16,16 @@ namespace MergeGuard.Controllers
         private readonly ILogger<GitHubWebhookController> _logger;
         private readonly GitHubInstallationTokenClient _installTokenClient;
         private readonly GitHubChecksClient _checksClient;
+        private readonly GitHubPullRequestClient _prClient;
 
-        public GitHubWebhookController(IConfiguration config, OllamaRiskClient ollama, ILogger<GitHubWebhookController> logger, GitHubInstallationTokenClient installationTokenClient, GitHubChecksClient checksClient)
+        public GitHubWebhookController(IConfiguration config, OllamaRiskClient ollama, ILogger<GitHubWebhookController> logger, GitHubInstallationTokenClient installationTokenClient, GitHubChecksClient checksClient, GitHubPullRequestClient prClient)
         {
             _config = config;
             _ollama = ollama;
             _logger = logger;
             _installTokenClient = installationTokenClient;
             _checksClient = checksClient;
+            _prClient = prClient;
         }
 
         [HttpGet]
@@ -109,22 +111,50 @@ namespace MergeGuard.Controllers
             // Get installation token
             var token = await _installTokenClient.CreateInstallationTokenAsync(installationId.Value, ct);
 
-            // Create dummy check run
+            if (prNumber is null)
+            {
+                return Ok(new { ok = true, message = "Missing pull_request.number in payload." });
+            }
+
+            var files = await _prClient.ListPullRequestFilesAsync(token, owner, repo, prNumber.Value, ct);
+
+            // Build a capped input to avoid huge prompts
+            var aiInput = BuildAiInput(owner, repo, prNumber.Value, headSha, files, maxChars: 12000);
+
+            // AI risk analysis with Ollama
+            var report = await _ollama.AnalyzeAsync(aiInput, ct);
+
+            // Post the result back to github as a check run
+            var conclusion = report.RiskLevel switch
+            {
+                "High" => "failure",
+                "Medium" => "neutral",
+                _ => "success"
+            };
+
+            var summary = $"Risk: {report.RiskLevel} ({report.RiskScore}/100)\n"
+                          + $"- Files analyzed: {files.Count}\n"
+                          + $"- Patches included: {files.Count(f => !string.IsNullOrWhiteSpace(f.Patch))}";
+
+            var text = "Reasons:\n-" + string.Join("\n- ", report.Reasons)
+                        + "\n\nRecommended tests:\n " + string.Join("\n- ", report.RecommendedTests);
+
+            //// Create dummy check run
             await _checksClient.CreateCheckRunAsync
                 (
                     token,
                     owner,
                     repo,
                     headSha,
-                    title: "MergeGuard (Demo)",
-                    summary: "Webhook received and GitHub app auth succeeded.",
-                    text: "Next: fetch PR files + run AI risk analysis.",
+                    title: "MergeGuard Risk Report",
+                    summary: summary,
+                    text: conclusion,
                     ct
                 );
 
-            return Ok(new { ok = true, message = "Check run created." });
+            return Ok(new { ok = true, message = "Risk check created.", risk = report });
 
-            // add back later after testing
+            // Remove later
             //var diff = GetString(root, "diff");
 
             //if (string.IsNullOrWhiteSpace(diff))
@@ -154,6 +184,65 @@ namespace MergeGuard.Controllers
             //    headSha,
             //    risk = report
             //});
+        }
+
+        /// <summary>
+        /// Helper method to build an AI input
+        /// </summary>
+        /// <param name="owner"></param>
+        /// <param name="repo"></param>
+        /// <param name="prNumber"></param>
+        /// <param name="headSha"></param>
+        /// <param name="files"></param>
+        /// <param name="maxChars"></param>
+        /// <returns></returns>
+        private static string BuildAiInput(
+            string owner,
+            string repo, 
+            int prNumber,
+            string headSha,
+            IReadOnlyList<GitHubPullRequestClient.PullFile> files,
+            int maxChars)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine($"Repo: {owner}/{repo}");
+            sb.AppendLine($"PR: #{prNumber}");
+            sb.AppendLine($"HEAD SHA: {headSha}");
+            sb.AppendLine();
+
+            // Include filenames first (useful even if patches are missing)
+            sb.AppendLine("Changed files:");
+            foreach(var f in files)
+            {
+                sb.AppendLine($"- {f.FileName} ({f.Status}, +{f.Additions}/-{f.Deletions})");
+            }
+            sb.AppendLine();
+
+            sb.AppendLine("Patches (truncated):");
+
+            foreach (var f in files)
+            {
+                // Lets focus on c# files first
+                if (!f.FileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(f.Patch))
+                    continue;
+
+                sb.AppendLine($"--- {f.FileName} ---");
+                sb.AppendLine(f.Patch);
+                sb.AppendLine();
+
+                if (sb.Length >= maxChars)
+                    break;
+            }
+
+            // absolute cap
+            if (sb.Length > maxChars)
+                return sb.ToString(0, maxChars);
+
+            return sb.ToString();
         }
 
         private static bool IsActionWeCareAbout(string action)
