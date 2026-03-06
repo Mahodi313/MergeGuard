@@ -32,7 +32,10 @@ namespace MergeGuard.Services
             CancellationToken ct)
         {
             // GitHub REST: GET /repos/{owner}/{repo}/pulls/{pull_number}/files
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"repos/{owner}/pulls/{pullNumber}/files?per_page=100");
+            using var req = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"repos/{owner}/{repo}/pulls/{pullNumber}/files?per_page=100"
+            );
 
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", installationToken);
             req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");

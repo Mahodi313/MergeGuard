@@ -23,6 +23,7 @@ namespace MergeGuard.Services
             string conclusion,
             CancellationToken ct)
         {
+
             using var req = new HttpRequestMessage(HttpMethod.Post, $"repos/{owner}/{repo}/check-runs");
 
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", installationToken);

@@ -10,7 +10,9 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddHttpClient<OllamaRiskClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Ollama:BaseUrl"] ?? "http://localhost:11434/api");
+    client.BaseAddress = new Uri(
+        builder.Configuration["Ollama:BaseUrl"] ?? "http://localhost:11434/api/"
+    );
 });
 
 builder.Services.AddSingleton<GitHubAppJwtFactory>();

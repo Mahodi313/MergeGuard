@@ -139,6 +139,9 @@ namespace MergeGuard.Controllers
             var text = "Reasons:\n-" + string.Join("\n- ", report.Reasons)
                         + "\n\nRecommended tests:\n " + string.Join("\n- ", report.RecommendedTests);
 
+            var test = "Test commit ciimfsisa";
+            Console.WriteLine(test);
+
             // Create check run
             await _checksClient.CreateCheckRunAsync
                 (
