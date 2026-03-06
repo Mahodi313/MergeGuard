@@ -15,8 +15,6 @@ builder.Services.AddHttpClient<OllamaRiskClient>(client =>
     );
 });
 
-//Test
-
 builder.Services.AddSingleton<GitHubAppJwtFactory>();
 
 // Creates typed clients for github api calls.

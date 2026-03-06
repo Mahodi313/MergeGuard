@@ -37,17 +37,12 @@ namespace MergeGuard.Services
                 $"repos/{owner}/{repo}/pulls/{pullNumber}/files?per_page=100"
             );
 
-            // Test
-
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", installationToken);
             req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
             req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
             using var resp = await _httpClient.SendAsync(req, ct);
             resp.EnsureSuccessStatusCode();
-
-            // ALSkdsoadkosa
-            // tests
 
             var json = await resp.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(json);

@@ -23,8 +23,6 @@ namespace MergeGuard.Services
             string conclusion,
             CancellationToken ct)
         {
-            var test = "Test commit ciimfsisa";
-            Console.WriteLine(test);
 
             using var req = new HttpRequestMessage(HttpMethod.Post, $"repos/{owner}/{repo}/check-runs");
 

@@ -51,7 +51,21 @@ namespace MergeGuard.Services
                 new { role = "system", content = system },
                 new { role = "user", content = user }
             },
-                stream = false
+                stream = false,
+
+                format = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        riskScore = new { type = "integer" },
+                        riskLevel = new { type = "string" },
+                        reasons = new { type = "array", items = new { type = "string" } },
+                        recommendedTests = new { type = "array", items = new { type = "string" } }
+                    },
+
+                    required = new[] { "riskScore", "riskLevel", "reasons", "recommendedTests" }
+                }
             };
 
             var resp = await _http.PostAsJsonAsync("chat", req, ct);
@@ -59,7 +73,7 @@ namespace MergeGuard.Services
 
             // Ollama returns JSON
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
-            var content = doc.RootElement.GetProperty("message").GetProperty("content").GetString();
+            var content = doc.RootElement.GetProperty("message").GetProperty("content").GetRawText();
 
             if (string.IsNullOrWhiteSpace(content))
                 return new RiskReport { RiskScore = 0, RiskLevel = "Low", Reasons = ["No model output"], RecommendedTests = [] };
@@ -67,10 +81,10 @@ namespace MergeGuard.Services
             // Parse the model into RiskReport
             try
             {
-                return JsonSerializer.Deserialize<RiskReport>(content, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }) ?? new RiskReport { RiskScore = 0, RiskLevel = "Low", Reasons = ["Invalid JSON"], RecommendedTests = [] };
+                return JsonSerializer.Deserialize<RiskReport>(
+                    content,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                )!;
             }
             catch
             {
