@@ -139,7 +139,7 @@ namespace MergeGuard.Controllers
             var text = "Reasons:\n-" + string.Join("\n- ", report.Reasons)
                         + "\n\nRecommended tests:\n " + string.Join("\n- ", report.RecommendedTests);
 
-            //// Create dummy check run
+            // Create check run
             await _checksClient.CreateCheckRunAsync
                 (
                     token,
@@ -149,7 +149,7 @@ namespace MergeGuard.Controllers
                     title: "MergeGuard Risk Report",
                     summary: summary,
                     text: text,
-                    conclusion: conclusion
+                    conclusion: conclusion,
                     ct
                 );
 
