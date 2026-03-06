@@ -149,7 +149,7 @@ namespace MergeGuard.Controllers
                     title: "MergeGuard Risk Report",
                     summary: summary,
                     text: text,
-                    conclusion: conclusion
+                    conclusion: conclusion,
                     ct
                 );
 
