@@ -157,37 +157,6 @@ namespace MergeGuard.Controllers
                 );
 
             return Ok(new { ok = true, message = "Risk check created.", risk = report });
-
-            // Remove later
-            //var diff = GetString(root, "diff");
-
-            //if (string.IsNullOrWhiteSpace(diff))
-            //{
-            //    return Ok(new
-            //    {
-            //        ok = true,
-            //        action,
-            //        repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
-            //        prNumber,
-            //        headSha,
-            //        message = "No 'diff' provided in payload. Real GitHub PR webhooks do not include diffs. Implement PR file fetching next."
-            //    });
-            //}
-
-            //// Analyze the diff with Ollama and get a risk report
-            //var report = await _ollama.AnalyzeAsync(diff, ct);
-
-            //return Ok(new
-            //{
-            //    ok = true,
-            //    eventName,
-            //    deliveryId,
-            //    action,
-            //    repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
-            //    prNumber,
-            //    headSha,
-            //    risk = report
-            //});
         }
 
         /// <summary>

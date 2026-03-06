@@ -16,7 +16,9 @@ namespace MergeGuard.Services
 
         public async Task<RiskReport> AnalyzeAsync(string changeText, CancellationToken ct = default)
         {
-            var model = _config["Ollama:Model"] ?? "gemma3:1b";
+
+            // TEST comment
+            var model = _config["Ollama:Model"] ?? "gemma3:4b";
 
             // Prompt
             var system = """
