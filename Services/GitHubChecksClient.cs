@@ -20,6 +20,7 @@ namespace MergeGuard.Services
             string title,
             string summary,
             string text,
+            string conclusion,
             CancellationToken ct)
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, $"repos/{owner}/{repo}/check-runs");
@@ -33,7 +34,7 @@ namespace MergeGuard.Services
                 name = "MergeGuard",
                 head_sha = headSha,
                 status = "completed",
-                conclusion = "neutral",
+                conclusion = conclusion, // "success", "neutral", "failure" etc.
                 output = new
                 {
                     title,

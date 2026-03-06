@@ -14,12 +14,18 @@ namespace MergeGuard.Controllers
         private readonly IConfiguration _config;
         private readonly OllamaRiskClient _ollama;
         private readonly ILogger<GitHubWebhookController> _logger;
+        private readonly GitHubInstallationTokenClient _installTokenClient;
+        private readonly GitHubChecksClient _checksClient;
+        private readonly GitHubPullRequestClient _prClient;
 
-        public GitHubWebhookController(IConfiguration config, OllamaRiskClient ollama, ILogger<GitHubWebhookController> logger)
+        public GitHubWebhookController(IConfiguration config, OllamaRiskClient ollama, ILogger<GitHubWebhookController> logger, GitHubInstallationTokenClient installationTokenClient, GitHubChecksClient checksClient, GitHubPullRequestClient prClient)
         {
             _config = config;
             _ollama = ollama;
             _logger = logger;
+            _installTokenClient = installationTokenClient;
+            _checksClient = checksClient;
+            _prClient = prClient;
         }
 
         [HttpGet]
@@ -70,7 +76,7 @@ namespace MergeGuard.Controllers
             var action = GetString(root, "action") ?? "unknown";
             var owner = GetString(root, "repository", "owner", "login");
             var repo = GetString(root, "repository", "name");
-            var prNumber = GetInt(root, "number");
+            var prNumber = GetInt(root, "pull_request", "number");
             var headSha = GetString(root, "pull_request", "head", "sha");
 
             _logger.LogInformation("PR webhook action={Action} repo={Owner}/{Repo} pr={PrNumber} sha={HeadSha}",
@@ -91,35 +97,152 @@ namespace MergeGuard.Controllers
                 });
             }
 
-            var diff = GetString(root, "diff");
-
-            if (string.IsNullOrWhiteSpace(diff))
+            var installationId = GetLong(root, "installation", "id");
+            if (installationId is null)
             {
-                return Ok(new
-                {
-                    ok = true,
-                    action,
-                    repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
-                    prNumber,
-                    headSha,
-                    message = "No 'diff' provided in payload. Real GitHub PR webhooks do not include diffs. Implement PR file fetching next."
-                });
+                return Ok(new { ok = true, message = "Missing installation.id in payload. Is the GitHub App installed on this repo?" });
+            }
+                
+            if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo) || string.IsNullOrWhiteSpace(headSha))
+            {
+                return Ok(new { ok = true, message = "Missing owner/repo/headSha in payload." });
+            }
+               
+            // Get installation token
+            var token = await _installTokenClient.CreateInstallationTokenAsync(installationId.Value, ct);
+
+            if (prNumber is null)
+            {
+                return Ok(new { ok = true, message = "Missing pull_request.number in payload." });
             }
 
-            // Analyze the diff with Ollama and get a risk report
-            var report = await _ollama.AnalyzeAsync(diff, ct);
+            var files = await _prClient.ListPullRequestFilesAsync(token, owner, repo, prNumber.Value, ct);
 
-            return Ok(new
+            // Build a capped input to avoid huge prompts
+            var aiInput = BuildAiInput(owner, repo, prNumber.Value, headSha, files, maxChars: 12000);
+
+            // AI risk analysis with Ollama
+            var report = await _ollama.AnalyzeAsync(aiInput, ct);
+
+            // Post the result back to github as a check run
+            var conclusion = report.RiskLevel switch
             {
-                ok = true,
-                eventName,
-                deliveryId,
-                action,
-                repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
-                prNumber,
-                headSha,
-                risk = report
-            });
+                "High" => "failure",
+                "Medium" => "neutral",
+                _ => "success"
+            };
+
+            var summary = $"Risk: {report.RiskLevel} ({report.RiskScore}/100)\n"
+                          + $"- Files analyzed: {files.Count}\n"
+                          + $"- Patches included: {files.Count(f => !string.IsNullOrWhiteSpace(f.Patch))}";
+
+            var text = "Reasons:\n-" + string.Join("\n- ", report.Reasons)
+                        + "\n\nRecommended tests:\n " + string.Join("\n- ", report.RecommendedTests);
+
+            //// Create dummy check run
+            await _checksClient.CreateCheckRunAsync
+                (
+                    token,
+                    owner,
+                    repo,
+                    headSha,
+                    title: "MergeGuard Risk Report",
+                    summary: summary,
+                    text: conclusion,
+                    ct
+                );
+
+            return Ok(new { ok = true, message = "Risk check created.", risk = report });
+
+            // Remove later
+            //var diff = GetString(root, "diff");
+
+            //if (string.IsNullOrWhiteSpace(diff))
+            //{
+            //    return Ok(new
+            //    {
+            //        ok = true,
+            //        action,
+            //        repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
+            //        prNumber,
+            //        headSha,
+            //        message = "No 'diff' provided in payload. Real GitHub PR webhooks do not include diffs. Implement PR file fetching next."
+            //    });
+            //}
+
+            //// Analyze the diff with Ollama and get a risk report
+            //var report = await _ollama.AnalyzeAsync(diff, ct);
+
+            //return Ok(new
+            //{
+            //    ok = true,
+            //    eventName,
+            //    deliveryId,
+            //    action,
+            //    repo = (owner is null || repo is null) ? null : $"{owner}/{repo}",
+            //    prNumber,
+            //    headSha,
+            //    risk = report
+            //});
+        }
+
+        /// <summary>
+        /// Helper method to build an AI input
+        /// </summary>
+        /// <param name="owner"></param>
+        /// <param name="repo"></param>
+        /// <param name="prNumber"></param>
+        /// <param name="headSha"></param>
+        /// <param name="files"></param>
+        /// <param name="maxChars"></param>
+        /// <returns></returns>
+        private static string BuildAiInput(
+            string owner,
+            string repo, 
+            int prNumber,
+            string headSha,
+            IReadOnlyList<GitHubPullRequestClient.PullFile> files,
+            int maxChars)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine($"Repo: {owner}/{repo}");
+            sb.AppendLine($"PR: #{prNumber}");
+            sb.AppendLine($"HEAD SHA: {headSha}");
+            sb.AppendLine();
+
+            // Include filenames first (useful even if patches are missing)
+            sb.AppendLine("Changed files:");
+            foreach(var f in files)
+            {
+                sb.AppendLine($"- {f.FileName} ({f.Status}, +{f.Additions}/-{f.Deletions})");
+            }
+            sb.AppendLine();
+
+            sb.AppendLine("Patches (truncated):");
+
+            foreach (var f in files)
+            {
+                // Lets focus on c# files first
+                if (!f.FileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(f.Patch))
+                    continue;
+
+                sb.AppendLine($"--- {f.FileName} ---");
+                sb.AppendLine(f.Patch);
+                sb.AppendLine();
+
+                if (sb.Length >= maxChars)
+                    break;
+            }
+
+            // absolute cap
+            if (sb.Length > maxChars)
+                return sb.ToString(0, maxChars);
+
+            return sb.ToString();
         }
 
         private static bool IsActionWeCareAbout(string action)
@@ -184,7 +307,7 @@ namespace MergeGuard.Controllers
                 current = next;
             }
 
-            return current.ValueKind == JsonValueKind.String ? current.GetString() : current.GetString();
+            return current.ValueKind == JsonValueKind.String ? current.GetString() : current.ToString();
         }
 
         private static int? GetInt(JsonElement root, params string[] path)
@@ -201,6 +324,21 @@ namespace MergeGuard.Controllers
             }
 
             return current.ValueKind == JsonValueKind.Number && current.TryGetInt32(out var v) ? v : null;
+        }
+
+        private static long? GetLong(JsonElement root, params string[] path)
+        {
+            var current = root;
+            foreach (var p in path)
+            {
+                if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(p, out var next))
+                {
+                    return null;
+                }
+                current = next;
+            }
+
+            return current.ValueKind == JsonValueKind.Number && current.TryGetInt64(out var v) ? v : null;
         }
     }
 }
