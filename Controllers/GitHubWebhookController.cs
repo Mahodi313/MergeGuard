@@ -148,7 +148,8 @@ namespace MergeGuard.Controllers
                     headSha,
                     title: "MergeGuard Risk Report",
                     summary: summary,
-                    text: conclusion,
+                    text: text,
+                    conclusion: conclusion
                     ct
                 );
 
