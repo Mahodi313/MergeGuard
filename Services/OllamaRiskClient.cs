@@ -72,6 +72,9 @@ namespace MergeGuard.Services
 
             var resp = await _http.PostAsJsonAsync("chat", req, ct);
             resp.EnsureSuccessStatusCode();
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+            Console.WriteLine("OLLAMA RAW RESPONSE:");
+            Console.WriteLine(raw);
 
             // Ollama returns JSON
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
