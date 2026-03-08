@@ -16,7 +16,9 @@ namespace MergeGuard.Services
 
         public async Task<RiskReport> AnalyzeAsync(string changeText, CancellationToken ct = default)
         {
-            var model = _config["Ollama:Model"] ?? "gemma3:1b";
+
+            // TEST comment
+            var model = _config["Ollama:Model"] ?? "gemma3:4b";
 
             // Prompt
             var system = """
@@ -70,6 +72,9 @@ namespace MergeGuard.Services
 
             var resp = await _http.PostAsJsonAsync("chat", req, ct);
             resp.EnsureSuccessStatusCode();
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+            Console.WriteLine("OLLAMA RAW RESPONSE:");
+            Console.WriteLine(raw);
 
             // Ollama returns JSON
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
