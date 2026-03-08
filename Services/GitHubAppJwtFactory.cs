@@ -35,13 +35,14 @@ namespace MergeGuard.Services
             rsa.ImportFromPem(pem);
 
             var now = DateTimeOffset.UtcNow;
+            var stringtest = "test";
 
             //Github requries:
             // "iat" - Issued at (now)
             // "exp"- short expiration, max 10 minutes from now
             // "iss" - GitHub App's identifier
 
-            // Note: System.IdentityModel.Tokens.Jwt does not support "nbf" claim, and GitHub does not require it, so we omit it. TETSTSTS
+            // Note: System.IdentityModel.Tokens.Jwt does not support "nbf" claim, and GitHub does not require it, so we omit it.
 
             var claims = new List<Claim>
             {
