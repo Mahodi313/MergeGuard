@@ -70,7 +70,6 @@ namespace MergeGuard.Services
                 }
             };
 
-            // test 23234343
             var resp = await _http.PostAsJsonAsync("chat", req, ct);
             resp.EnsureSuccessStatusCode();
             var raw = await resp.Content.ReadAsStringAsync(ct);
