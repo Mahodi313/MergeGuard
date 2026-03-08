@@ -35,6 +35,7 @@ namespace MergeGuard.Services
             rsa.ImportFromPem(pem);
 
             var now = DateTimeOffset.UtcNow;
+            var stringtest = "test";
 
             //Github requries:
             // "iat" - Issued at (now)
