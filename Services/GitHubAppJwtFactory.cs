@@ -16,7 +16,6 @@ namespace MergeGuard.Services
 
         public string CreateJwt()
         {
-            // TEST #2 AI analyse
             // Github app id is used as the "iis"
             var appIdRaw = _config["GitHub:AppId"];
             if (string.IsNullOrWhiteSpace(appIdRaw))
@@ -42,7 +41,7 @@ namespace MergeGuard.Services
             // "exp"- short expiration, max 10 minutes from now
             // "iss" - GitHub App's identifier
 
-            // Note: System.IdentityModel.Tokens.Jwt does not support "nbf" claim, and GitHub does not require it, so we omit it. TETSTSTS
+            // Note: System.IdentityModel.Tokens.Jwt does not support "nbf" claim, and GitHub does not require it, so we omit it.
 
             var claims = new List<Claim>
             {

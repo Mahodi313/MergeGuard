@@ -211,7 +211,6 @@ namespace MergeGuard.Controllers
                     break;
             }
 
-            // TEST #2 comment for ai
             // absolute cap
             if (sb.Length > maxChars)
                 return sb.ToString(0, maxChars);
