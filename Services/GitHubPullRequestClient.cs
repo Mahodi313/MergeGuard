@@ -16,7 +16,7 @@ namespace MergeGuard.Services
 
         /// <summary>
         /// Uses the installation token to call Github REST API
-        /// Patch is not guaranteed for every file (normal), binary files, large diffs, etc.
+        /// Patch is not guaranteed for every file (normal), binary files, large diffs, etc.222
         /// </summary>
         /// <param name="installationToken"></param>
         /// <param name="owner"></param>
