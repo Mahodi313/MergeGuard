@@ -16,6 +16,7 @@ namespace MergeGuard.Services
 
         public string CreateJwt()
         {
+            // TEST #2 AI analyse
             // Github app id is used as the "iis"
             var appIdRaw = _config["GitHub:AppId"];
             if (string.IsNullOrWhiteSpace(appIdRaw))
